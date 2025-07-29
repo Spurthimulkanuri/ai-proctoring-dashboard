@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Violation Replay - {{ student_id }}</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      text-align: center;
+      background: #f5f5f5;
+      padding: 30px;
+    }
+
+    #image-box {
+      margin-top: 20px;
+    }
+
+    img {
+      max-width: 600px;
+      height: auto;
+      border: 2px solid #333;
+      box-shadow: 0 0 10px #999;
+    }
+
+    button {
+      padding: 10px 20px;
+      margin: 20px 10px;
+      font-size: 16px;
+      border-radius: 6px;
+      border: none;
+      background: #007BFF;
+      color: white;
+      cursor: pointer;
+    }
+
+    button:hover {
+      background: #0056b3;
+    }
+  </style>
+</head>
+<body>
+
+  <h2>📼 Violation Replay for <b>{{ student_id }}</b></h2>
+  <p>{{ images|length }} snapshots found</p>
+
+  <div id="image-box">
+    <img id="slideshow" src="{{ images[0] if images else '' }}">
+  </div>
+
+  <div>
+    <button onclick="prev()">⏮️ Previous</button>
+    <button onclick="next()">⏭️ Next</button>
+    <button onclick="autoPlay()">▶️ Auto Play</button>
+    <button onclick="stopAuto()">⏹️ Stop</button>
+  </div>
+
+  <script>
+    let images = {{ images|tojson }};
+    let index = 0;
+    let interval;
+
+    function showImage(i) {
+      if (images.length === 0) return;
+      document.getElementById("slideshow").src = images[i];
+    }
+
+    function next() {
+      index = (index + 1) % images.length;
+      showImage(index);
+    }
+
+    function prev() {
+      index = (index - 1 + images.length) % images.length;
+      showImage(index);
+    }
+
+    function autoPlay() {
+      stopAuto();
+      interval = setInterval(next, 2000);  // 2 sec interval
+    }
+
+    function stopAuto() {
+      clearInterval(interval);
+    }
+
+    // Start with first image
+    showImage(index);
+  </script>
+
+</body>
+</html>
+

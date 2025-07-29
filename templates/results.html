@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>🏆 Exam Results - {{ subject }}</title>
+  <style>
+    table {
+      border-collapse: collapse;
+      width: 80%;
+      margin: auto;
+    }
+    th, td {
+      border: 1px solid #aaa;
+      padding: 10px;
+      text-align: center;
+    }
+    th {
+      background-color: #f2f2f2;
+    }
+    h2 {
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+  <h2>🏆 Results for {{ subject }}</h2>
+  <table>
+    <tr>
+      <th>Rank</th>
+      <th>Student</th>
+      <th>Marks</th>
+      <th>Violations</th>
+    </tr>
+
+    {% for row in results %}
+    <tr>
+      <td>{{ loop.index }}</td>
+      <td>{{ row[0] }}</td>
+      <td>{{ row[1] }}</td>
+      <td>{{ row[2] }}</td>
+    </tr>
+    {% endfor %}
+
+  </table>
+</body>
+</html>
+

@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Admin Panel - ShuddhaExam</title>
+  <style>
+    body { font-family: Arial; background: #f9f9f9; padding: 20px; }
+    table, th, td { border: 1px solid black; border-collapse: collapse; padding: 8px; }
+    h2 { color: darkblue; }
+  </style>
+</head>
+<body>
+  <h2>🔐 Admin Dashboard</h2>
+
+  <!-- ✅ Add Manual Question Form -->
+  <h3>➕ Add New Question</h3>
+  <form action="/add_question" method="POST">
+    Subject: <input type="text" name="subject" required><br>
+    Branch:
+    <select name="branch" required>
+      <option value="CSE">CSE</option>
+      <option value="ECE">ECE</option>
+      <option value="EEE">EEE</option>
+    </select><br>
+    Year:
+    <select name="year" required>
+      <option value="1">1st</option>
+      <option value="2">2nd</option>
+      <option value="3">3rd</option>
+      <option value="4">4th</option>
+    </select><br><br>
+
+    Question: <input type="text" name="question_text" required><br>
+    A: <input type="text" name="option_a"> 
+    B: <input type="text" name="option_b"><br>
+    C: <input type="text" name="option_c"> 
+    D: <input type="text" name="option_d"><br>
+    
+    Correct Answer: <input type="text" name="correct_answer" required><br><br>
+
+    <button type="submit">✅ Add Question</button>
+  </form>
+<a href="{{ url_for('view_logs') }}">📄 View Exam Logs</a>
+<a href="/live">📺 Live Proctoring</a>
+<a href="/analytics">📈 View Cheating Analytics</a>
+<a href="{{ url_for('admin_chat') }}">💬 Live Chat With Students</a>
+<a href="/plagiarism_check" target="_blank">
+  🔍 Check Plagiarism
+</a>
+<a href="/replay/spurthi">🔁 View Violations</a>
+<!-- 🔽 Select Subject to View Rankings -->
+<form action="/results" method="get" style="margin-top: 20px;">
+  <label for="subject"><b>🏆 View Results by Subject:</b></label>
+  <select name="subject" id="subject" required>
+    <option value="dec">dec</option>
+    <option value="python">python</option>
+    <option value="electrical">electrical</option>
+    <!-- ➕ Add more subjects here -->
+  </select>
+  <button type="submit">View Results</button>
+</form>
+
+  <!-- ✅ Upload Excel -->
+  <h3>📥 Upload Questions from Excel</h3>
+  <form method="POST" action="/upload_excel" enctype="multipart/form-data">
+    Subject: <input type="text" name="subject" required><br>
+    Branch:
+    <select name="branch" required>
+      <option value="CSE">CSE</option>
+      <option value="ECE">ECE</option>
+      <option value="EEE">EEE</option>
+    </select><br>
+    Year:
+    <select name="year" required>
+      <option value="1">1st</option>
+      <option value="2">2nd</option>
+      <option value="3">3rd</option>
+      <option value="4">4th</option>
+    </select><br>
+    Excel File: <input type="file" name="excel_file" accept=".xlsx" required><br><br>
+    <input type="submit" value="Upload">
+  </form>
+
+  <hr>
+
+  <!-- ✅ Show All Questions -->
+  <h3>📋 Existing Questions</h3>
+  <table>
+    <tr>
+      <th>ID</th><th>Subject</th><th>Question</th><th>A</th><th>B</th><th>C</th><th>D</th>
+      <th>Correct</th><th>Branch</th><th>Year</th><th>Action</th>
+    </tr>
+    {% for q in questions %}
+      <tr>
+        <td>{{ q[0] }}</td>
+        <td>{{ q[1] }}</td>
+        <td>{{ q[2] }}</td>
+        <td>{{ q[3] }}</td>
+        <td>{{ q[4] }}</td>
+        <td>{{ q[5] }}</td>
+        <td>{{ q[6] }}</td>
+        <td>{{ q[7] }}</td>
+        <td>{{ q[8] }}</td>
+        <td>{{ q[9] }}</td>
+        <td>
+          <a href="{{ url_for('delete_question', id=q[0]) }}" onclick="return confirm('Are you sure?')">❌ Delete</a>
+        </td>
+      </tr>
+    {% endfor %}
+  </table>
+
+  <hr>
+
+  <!-- ✅ Show All Users -->
+  <h3>👥 Registered Users</h3>
+  <table>
+    <tr><th>ID</th><th>Username</th><th>Role</th><th>Branch</th><th>Year</th><th>Subject</th></tr>
+    {% for u in users %}
+      <tr>
+        <td>{{ u[0] }}</td>
+        <td>{{ u[1] }}</td>
+        <td>{{ u[3] }}</td>
+        <td>{{ u[4] }}</td>
+        <td>{{ u[5] }}</td>
+        <td>{{ u[6] }}</td>
+      </tr>
+    {% endfor %}
+  </table>
+
+</body>
+</html>
+

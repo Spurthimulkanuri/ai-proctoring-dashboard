@@ -1,0 +1,658 @@
+# app.py
+import os, sqlite3, bcrypt, base64, io
+from flask import Flask, render_template, request, redirect, url_for, jsonify, Response
+from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
+from datetime import datetime
+import pandas as pd
+from collections import defaultdict
+from flask_socketio import SocketIO, emit, join_room
+
+app = Flask(__name__)
+app.secret_key = 'shuddha_exam_secret'
+
+socketio = SocketIO(app)  # ✅ Add this here
+
+login_manager = LoginManager()
+login_manager.init_app(app)
+login_manager.login_view = 'login'
+
+UPLOAD_FOLDER = 'static/snapshots'
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+
+# User Model
+class User(UserMixin):
+    def __init__(self, id, username, role, subject):
+        self.id = id
+        self.username = username
+        self.role = role
+        self.subject = subject
+
+@login_manager.user_loader
+def load_user(user_id):
+    conn = sqlite3.connect('database.db')
+    c = conn.cursor()
+    c.execute("SELECT id, username, role, subject FROM users WHERE id = ?", (user_id,))
+    user = c.fetchone()
+    conn.close()
+    if user:
+        return User(id=user[0], username=user[1], role=user[2], subject=user[3])
+    return None
+
+def init_db():
+    conn = sqlite3.connect('database.db')
+    c = conn.cursor()
+
+    # Users table
+    c.execute('''CREATE TABLE IF NOT EXISTS users (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        username TEXT UNIQUE,
+        password TEXT,
+        role TEXT,
+        branch TEXT,
+        year TEXT,
+        subject TEXT
+    )''')
+
+    # Questions table
+    c.execute('''CREATE TABLE IF NOT EXISTS questions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        subject TEXT,
+        question_text TEXT,
+        option_a TEXT,
+        option_b TEXT,
+        option_c TEXT,
+        option_d TEXT,
+        correct_answer TEXT,
+        branch TEXT,
+        year TEXT
+    )''')
+
+    # Exam logs table with correct schema
+    c.execute('''CREATE TABLE IF NOT EXISTS exam_logs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        student_name TEXT,
+        subject TEXT,
+        answer TEXT,
+        submitted_at TEXT,
+        violations INTEGER DEFAULT 0,
+        timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+        cheating_type TEXT
+    )''')
+
+    conn.commit()
+    conn.close()
+
+init_db()
+
+@app.route('/')
+def home():
+    return redirect('/login')
+
+@app.route('/register', methods=['GET', 'POST'])
+def register():
+    if request.method == 'POST':
+        username = request.form['username']
+        password = request.form['password'].encode('utf-8')
+        branch = request.form['branch']
+        year = request.form['year']
+        subject = request.form['subject']
+
+        hashed = bcrypt.hashpw(password, bcrypt.gensalt()).decode('utf-8')
+
+        conn = sqlite3.connect('database.db')
+        c = conn.cursor()
+        try:
+            c.execute('''INSERT INTO users (username, password, role, branch, year, subject)
+                         VALUES (?, ?, 'student', ?, ?, ?)''', (username, hashed, branch, year, subject))
+            conn.commit()
+        except sqlite3.IntegrityError:
+            return "Username already exists"
+        conn.close()
+        return redirect('/login')
+    return render_template('register.html')
+
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    if request.method == 'POST':
+        username = request.form['username']
+        password = request.form['password'].encode('utf-8')
+
+        conn = sqlite3.connect('database.db')
+        c = conn.cursor()
+        c.execute("SELECT id, username, password, role, subject FROM users WHERE username = ?", (username,))
+        user = c.fetchone()
+        conn.close()
+
+        if user and bcrypt.checkpw(password, user[2].encode('utf-8')):
+            user_obj = User(id=user[0], username=user[1], role=user[3], subject=user[4])
+            login_user(user_obj)
+            return redirect(f"/exam?subject={user[4]}" if user[3] == 'student' else '/admin')
+        else:
+            return "Invalid credentials"
+    return render_template('login.html')
+
+@app.route('/exam')
+@login_required
+def exam():
+    if current_user.role != 'student':
+        return "Unauthorized", 403
+
+    conn = sqlite3.connect('database.db')
+    c = conn.cursor()
+    c.execute("SELECT branch, year FROM users WHERE username = ?", (current_user.username,))
+    branch_year = c.fetchone()
+    branch, year = branch_year if branch_year else (None, None)
+
+    subject = request.args.get('subject')
+    if not subject:
+        return "No subject selected", 400
+
+    c.execute("SELECT * FROM questions WHERE branch=? AND year=? AND subject=?", (branch, year, subject))
+    questions = c.fetchall()
+    conn.close()
+
+    return render_template('index.html', questions=questions, subject=subject)
+
+@app.route('/submit_exam', methods=['POST'])
+@login_required
+def submit_exam():
+    name = current_user.username
+    subject = request.form.get('subject')
+    submitted_at = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    violations = int(request.form.get('violations', 0))
+
+    answers = []
+    for key in request.form:
+        if key.startswith("q"):
+            answers.append(f"{key}:{request.form[key]}")
+    answer_str = "; ".join(answers)
+
+    conn = sqlite3.connect('database.db')
+    c = conn.cursor()
+    c.execute("INSERT INTO exam_logs (student_name, subject, answer, submitted_at, violations) VALUES (?, ?, ?, ?, ?)",
+              (name, subject, answer_str, submitted_at, violations))
+    conn.commit()
+    conn.close()
+
+    return '✅ Exam Submitted Successfully'
+
+@app.route('/admin')
+@login_required
+def admin_dashboard():
+    if current_user.role != 'admin':
+        return "Unauthorized", 403
+
+    conn = sqlite3.connect('database.db')
+    c = conn.cursor()
+    c.execute("SELECT * FROM users")
+    users = c.fetchall()
+    c.execute("SELECT * FROM questions")
+    questions = c.fetchall()
+    conn.close()
+    return render_template('admin_panel.html', users=users, questions=questions)
+
+@app.route('/add_question', methods=['POST'])
+@login_required
+def add_question():
+    if current_user.role != 'admin':
+        return "Unauthorized", 403
+
+    data = request.form
+    conn = sqlite3.connect('database.db')
+    c = conn.cursor()
+    c.execute('''INSERT INTO questions (subject, question_text, option_a, option_b, option_c, option_d, correct_answer, branch, year)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)''',
+              (data['subject'], data['question_text'], data['option_a'], data['option_b'],
+               data['option_c'], data['option_d'], data['correct_answer'], data['branch'], data['year']))
+    conn.commit()
+    conn.close()
+    return redirect('/admin')
+
+@app.route('/upload_excel', methods=['POST'])
+@login_required
+def upload_excel():
+    if current_user.role != 'admin':
+        return "Unauthorized", 403
+
+    file = request.files['excel_file']
+    subject = request.form['subject']
+    branch = request.form['branch']
+    year = request.form['year']
+
+    df = pd.read_excel(file)
+    required_cols = {'question_text', 'option_a', 'option_b', 'option_c', 'option_d', 'correct_answer'}
+    if not required_cols.issubset(df.columns):
+        return "Excel format incorrect. Required columns: question_text, option_a, option_b, option_c, option_d, correct_answer", 400
+
+    conn = sqlite3.connect('database.db')
+    c = conn.cursor()
+    for _, row in df.iterrows():
+        c.execute('''INSERT INTO questions (subject, question_text, option_a, option_b, option_c, option_d, correct_answer, branch, year)
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)''',
+                  (subject, row['question_text'], row['option_a'], row['option_b'],
+                   row['option_c'], row['option_d'], row['correct_answer'], branch, year))
+    conn.commit()
+    conn.close()
+
+    return redirect('/admin')
+
+@app.route('/view_logs')
+@login_required
+def view_logs():
+    if current_user.role != 'admin':
+        return "Unauthorized", 403
+
+    conn = sqlite3.connect('database.db')
+    c = conn.cursor()
+    c.execute("SELECT * FROM exam_logs")
+    logs = c.fetchall()
+    conn.close()
+    return render_template('logs.html', logs=logs)
+
+@app.route('/download_logs')
+@login_required
+def download_logs():
+    if current_user.role != 'admin':
+        return "Unauthorized", 403
+
+    conn = sqlite3.connect('database.db')
+    df = pd.read_sql_query("SELECT * FROM exam_logs", conn)
+    conn.close()
+
+    output = io.StringIO()
+    df.to_csv(output, index=False)
+    output.seek(0)
+
+    return Response(output, mimetype='text/csv',
+                    headers={'Content-Disposition': 'attachment;filename=exam_logs.csv'})
+
+@app.route('/analytics', methods=['GET', 'POST'])
+@login_required
+def analytics():
+    conn = sqlite3.connect('database.db')
+    c = conn.cursor()
+
+    c.execute("SELECT DISTINCT subject FROM exam_logs")
+    subjects = [row[0] for row in c.fetchall()]
+    selected_subject = request.form.get('subject') if request.method == 'POST' else ""
+    start_date = request.form.get('start_date') if request.method == 'POST' else ""
+    end_date = request.form.get('end_date') if request.method == 'POST' else ""
+
+    query = "SELECT student_name, SUM(violations), cheating_type FROM exam_logs WHERE 1=1"
+    params = []
+    if selected_subject:
+        query += " AND subject = ?"
+        params.append(selected_subject)
+    if start_date:
+        query += " AND date(timestamp) >= ?"
+        params.append(start_date)
+    if end_date:
+        query += " AND date(timestamp) <= ?"
+        params.append(end_date)
+
+    query += " GROUP BY student_name, cheating_type"
+    c.execute(query, params)
+    raw_data = c.fetchall()
+    conn.close()
+
+    student_totals = defaultdict(int)
+    cheat_type_totals = defaultdict(int)
+    for name, count, cheat_type in raw_data:
+        student_totals[name] += count
+        cheat_type_totals[cheat_type] += count
+
+    return render_template('analytics.html',
+                           names=list(student_totals.keys()),
+                           violations=list(student_totals.values()),
+                           cheat_labels=list(cheat_type_totals.keys()),
+                           cheat_counts=list(cheat_type_totals.values()),
+                           subjects=subjects,
+                           selected_subject=selected_subject,
+                           start_date=start_date,
+                           end_date=end_date)
+
+@app.route('/live')
+@login_required
+def live_feed():
+    if current_user.role != 'admin':
+        return "Unauthorized", 403
+
+    students = [f for f in os.listdir(UPLOAD_FOLDER) if f.endswith('.jpg')]
+    return render_template('live_feed.html', snapshots=students)
+
+@app.route('/upload_snapshot', methods=['POST'])
+@login_required
+def upload_snapshot():
+    data = request.get_json()
+    student_id = data['student_id']
+    image_data = data['image'].split(',')[1]
+    img_bytes = base64.b64decode(image_data)
+
+    filename = f"{student_id}.jpg"
+    filepath = os.path.join(UPLOAD_FOLDER, filename)
+    with open(filepath, 'wb') as f:
+        f.write(img_bytes)
+
+    return jsonify({"status": "success"}), 200
+@app.route('/admin_chat')
+@login_required
+def admin_chat():
+    if current_user.role != 'admin':
+        return "Unauthorized", 403
+    return render_template('admin_chat.html')
+
+@app.route('/logout')
+@login_required
+def logout():
+    logout_user()
+    return redirect('/login')
+@app.route('/exam_chat')
+@login_required
+def exam_chat():
+    print("Current user role:", current_user.role)
+    if current_user.role != 'student':
+        return "Unauthorized", 403
+    return render_template('exam_chat.html')
+
+
+@app.route('/delete_question/<int:id>')
+@login_required
+def delete_question(id):
+    if current_user.role != 'admin':
+        return "Unauthorized", 403
+
+    conn = sqlite3.connect('database.db')
+    c = conn.cursor()
+    c.execute("DELETE FROM questions WHERE id = ?", (id,))
+    conn.commit()
+    conn.close()
+
+    return redirect('/admin')
+@socketio.on('join')
+def handle_join(data):
+    room = data['room']
+    join_room(room)
+    emit('message', {'sender': 'System', 'msg': f"{data['user']} joined the chat."}, to=room)
+
+@socketio.on('send_message')
+def handle_message(data):
+    room = data['room']
+    emit('message', {'sender': data['user'], 'msg': data['msg']}, to=room)
+def parse_answers(answer_str):
+    """
+    Converts 'q1:A; q2:C' → {'q1': 'A', 'q2': 'C'}
+    Handles answers with ":" safely.
+    """
+    answers = {}
+    for pair in answer_str.split(";"):
+        if ":" in pair:
+            parts = pair.strip().split(":", 1)  # split only once
+            if len(parts) == 2:
+                q, a = parts
+                answers[q.strip()] = a.strip()
+    return answers
+
+
+def compare_answers(a1, a2):
+    """
+    Returns similarity percentage between two answer dicts
+    """
+    total = 0
+    matched = 0
+    for qid in a1:
+        if qid in a2:
+            total += 1
+            if a1[qid] == a2[qid]:
+                matched += 1
+    return (matched / total * 100) if total else 0
+
+def detect_plagiarism():
+    conn = sqlite3.connect("database.db")
+    c = conn.cursor()
+    c.execute("SELECT student_name, answer FROM exam_logs")
+    rows = c.fetchall()
+    conn.close()
+
+    parsed = [(name, parse_answers(ans)) for name, ans in rows]
+    flagged_pairs = []
+
+    for i in range(len(parsed)):
+        for j in range(i+1, len(parsed)):
+            name1, ans1 = parsed[i]
+            name2, ans2 = parsed[j]
+            sim = compare_answers(ans1, ans2)
+            if sim > 90:
+                flagged_pairs.append((name1, name2, round(sim, 2)))
+
+    return flagged_pairs
+
+@app.route('/plagiarism_check')
+@login_required
+def plagiarism_check():
+    if current_user.role != 'admin':
+        return "Unauthorized", 403
+
+    flagged = detect_plagiarism()
+    return render_template('plagiarism.html', flagged_pairs=flagged)
+
+if __name__ == '__main__':
+    socketio.run(app, debug=True)
+
+
+
+
+
+<!DOCTYPE html>
+<html>
+<head>
+  <title>ShuddhaExam - Secure Online Exam</title>
+
+  <!-- ✅ TensorFlow.js + coco-ssd -->
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd"></script>
+
+  <!-- ✅ face-api.js -->
+  <script defer src="https://cdn.jsdelivr.net/npm/@vladmandic/face-api/dist/face-api.min.js"></script>
+
+  <!-- ✅ Custom JS -->
+  <script defer src="/static/js/proctor.js"></script>
+
+  <style>
+    #timer {
+      font-size: 18px;
+      font-weight: bold;
+      color: red;
+      position: absolute;
+      top: 10px;
+      left: 20px;
+    }
+
+    #video {
+      position: fixed;
+      top: 10px;
+      right: 10px;
+      width: 300px;
+      height: 200px;
+      z-index: 9999;
+      border: 2px solid #444;
+      box-shadow: 0 0 10px #000;
+      background: #000;
+    }
+
+    body {
+      font-family: Arial, sans-serif;
+      margin: 0;
+      padding: 0 20px 100px;
+    }
+
+    .question-block {
+      margin-bottom: 20px;
+    }
+  </style>
+</head>
+<!-- 💬 Chat Box -->
+<!-- Student Chat with Admin -->
+<div id="chatbox" style="position: fixed; bottom: 10px; right: 10px; width: 300px; background: #fff; border: 1px solid #ccc; padding: 10px;">
+  <h4>💬 Chat with Admin</h4>
+  <div id="chat-messages" style="height: 200px; overflow-y: auto; background: #f9f9f9; padding: 5px; margin-bottom: 10px; border: 1px solid #ddd;">
+    <p><b>System:</b> {{ current_user.username }} joined the chat.</p>
+  </div>
+  <input type="text" id="chat-input" placeholder="Type your message..." style="width: 80%;" />
+  <button onclick="sendChatMessage()">Send</button>
+</div>
+
+
+<script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+<script>
+  const socket = io();
+  const room = "support";
+  const user = "{{ current_user.username }}";
+
+  // Join room on load
+  socket.emit('join', {room, user});
+
+  // Receive messages and display them in chat
+  socket.on('message', function(data) {
+    const chatBox = document.getElementById("chat-messages");
+    const msgElement = document.createElement("p");
+    msgElement.innerHTML = `<b>${data.sender}:</b> ${data.msg}`;
+    chatBox.appendChild(msgElement);
+    chatBox.scrollTop = chatBox.scrollHeight; // Auto-scroll
+  });
+
+  // Send message
+  function sendChatMessage() {
+    const input = document.getElementById("chat-input");
+    const msg = input.value.trim();
+    if (msg !== "") {
+      socket.emit('send_message', {room: room, user: user, msg: msg});
+      input.value = "";
+    }
+  }
+</script>
+
+
+
+<body onload="startFaceAndPhoneDetection(); startCountdown(); window.scrollTo(0, 0);">
+
+  <div id="timer">Time Left: 30:00</div>
+
+  <!-- ✅ Always-visible Webcam -->
+  <video id="video" autoplay muted></video>
+
+  <form id="examForm" method="POST" action="/submit_exam">
+    <h2>📝 Online Exam</h2>
+
+    <!-- ✅ Pass Subject -->
+    <input type="hidden" name="subject" value="{{ subject }}">
+
+    <label>Student Name:</label>
+    <input type="text" name="student_name" required />
+
+    <br><br>
+    {% for q in questions %}
+      <div class="question-block">
+        <p><strong>Q{{ loop.index }}:</strong> {{ q[1] }}</p>
+
+        <label><input type="radio" name="q{{ q[0] }}" value="{{ q[2] }}" required> {{ q[2] }}</label><br>
+        <label><input type="radio" name="q{{ q[0] }}" value="{{ q[3] }}"> {{ q[3] }}</label><br>
+        <label><input type="radio" name="q{{ q[0] }}" value="{{ q[4] }}"> {{ q[4] }}</label><br>
+        <label><input type="radio" name="q{{ q[0] }}" value="{{ q[5] }}"> {{ q[5] }}</label><br>
+        <hr>
+      </div>
+    {% endfor %}
+
+    <input type="hidden" name="violations" id="violations" value="0" />
+
+    <br><br>
+    <button type="submit">Submit</button>
+  </form>
+
+  <script>
+    // ⏳ Countdown Timer (30 minutes)
+    function startCountdown() {
+      let duration = 30 * 60;
+      const timerEl = document.getElementById("timer");
+
+      const interval = setInterval(() => {
+        const minutes = Math.floor(duration / 60);
+        const seconds = duration % 60;
+        timerEl.textContent = `Time Left: ${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+        duration--;
+
+        if (duration < 0) {
+          clearInterval(interval);
+          alert("⏰ Time's up! Auto-submitting exam.");
+          document.getElementById("examForm").submit();
+        }
+      }, 1000);
+    }
+
+    // 🔒 Tab switch detection
+    document.addEventListener("visibilitychange", () => {
+      if (document.hidden) {
+        alert("❗Tab switch detected! Submitting exam.");
+        document.getElementById("examForm").submit();
+      }
+    });
+
+    // ✅ On Submit
+    document.getElementById("examForm").addEventListener("submit", () => {
+      alert("✅ Exam submitted. Unlocking browser...");
+    });
+
+    // 🔒 System Key Blocker
+    document.addEventListener("keydown", function (e) {
+      const blockedKeys = [44, 123, 17, 18, 27];
+      if (blockedKeys.includes(e.keyCode)) {
+        alert("❌ System key pressed! Not allowed during exam.");
+        e.preventDefault();
+      }
+    });
+
+    // 🔒 Disable Right-Click
+    window.addEventListener("contextmenu", function (e) {
+      alert("❌ Right-click is disabled during exam.");
+      e.preventDefault();
+    });
+
+    // 🔒 Disable Copy, Paste, Cut, Drag
+    ["copy", "paste", "cut", "dragstart"].forEach(evt =>
+      document.addEventListener(evt, function (e) {
+        alert("🚫 Copy/Paste/Drag is disabled!");
+        e.preventDefault();
+      })
+    );
+  </script>
+
+  <!-- ✅ Snapshot Capture Every 5 Seconds -->
+  <script>
+    setInterval(() => {
+      navigator.mediaDevices.getUserMedia({ video: true }).then(stream => {
+        let video = document.createElement('video');
+        video.srcObject = stream;
+        video.play();
+        let canvas = document.createElement('canvas');
+        let context = canvas.getContext('2d');
+
+        video.onloadeddata = () => {
+          canvas.width = video.videoWidth;
+          canvas.height = video.videoHeight;
+          context.drawImage(video, 0, 0);
+          let dataURL = canvas.toDataURL('image/jpeg');
+
+          fetch('/upload_snapshot', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ image: dataURL, student_id: '{{ current_user.username }}' })
+          });
+
+          stream.getTracks().forEach(t => t.stop());
+        };
+      });
+    }, 5000);
+  </script>
+
+</body>
+</html>
+

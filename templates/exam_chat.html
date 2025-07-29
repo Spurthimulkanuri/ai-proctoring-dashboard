@@ -1,0 +1,35 @@
+<!-- exam_chat.html -->
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Student Chat</title>
+  <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+</head>
+<body>
+  <h2>📨 Student Support Chat</h2>
+  <div id="chat"></div>
+
+  <input id="msg" placeholder="Type your issue" />
+  <button onclick="send()">Send</button>
+
+  <script>
+    const socket = io();
+    const room = "support";
+    const user = "{{ current_user.username }}";
+
+    socket.emit('join', {room, user});
+
+    socket.on('message', data => {
+      const div = document.getElementById('chat');
+      div.innerHTML += `<p><b>${data.sender}:</b> ${data.msg}</p>`;
+    });
+
+    function send() {
+      const msg = document.getElementById('msg').value;
+      socket.emit('send_message', {room, user, msg});
+      document.getElementById('msg').value = '';
+    }
+  </script>
+</body>
+</html>
+

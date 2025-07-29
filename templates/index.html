@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>ShuddhaExam - Secure Online Exam</title>
+
+  <!-- ✅ TensorFlow.js + coco-ssd -->
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd"></script>
+
+  <!-- ✅ face-api.js -->
+  <script defer src="https://cdn.jsdelivr.net/npm/@vladmandic/face-api/dist/face-api.min.js"></script>
+
+  <!-- ✅ Custom JS -->
+  <script defer src="/static/js/proctor.js"></script>
+
+  <style>
+    #timer {
+      font-size: 18px;
+      font-weight: bold;
+      color: red;
+      position: absolute;
+      top: 10px;
+      left: 20px;
+    }
+
+    #video {
+      position: fixed;
+      top: 10px;
+      right: 10px;
+      width: 300px;
+      height: 200px;
+      z-index: 9999;
+      border: 2px solid #444;
+      box-shadow: 0 0 10px #000;
+      background: #000;
+    }
+
+    body {
+      font-family: Arial, sans-serif;
+      margin: 0;
+      padding: 0 20px 100px;
+    }
+
+    .question-block {
+      margin-bottom: 20px;
+    }
+  </style>
+</head>
+<!-- 💬 Chat Box -->
+<!-- Student Chat with Admin -->
+<div id="chatbox" style="position: fixed; bottom: 10px; right: 10px; width: 300px; background: #fff; border: 1px solid #ccc; padding: 10px;">
+  <h4>💬 Chat with Admin</h4>
+  <div id="chat-messages" style="height: 200px; overflow-y: auto; background: #f9f9f9; padding: 5px; margin-bottom: 10px; border: 1px solid #ddd;">
+    <p><b>System:</b> {{ current_user.username }} joined the chat.</p>
+  </div>
+  <input type="text" id="chat-input" placeholder="Type your message..." style="width: 80%;" />
+  <button onclick="sendChatMessage()">Send</button>
+</div>
+
+
+<script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+<script>
+  const socket = io();
+  const room = "support";
+  const user = "{{ current_user.username }}";
+  const CURRENT_USER = "{{ current_user.username }}";
+
+  // Join room on load
+  socket.emit('join', {room, user});
+
+  // Receive messages and display them in chat
+  socket.on('message', function(data) {
+    const chatBox = document.getElementById("chat-messages");
+    const msgElement = document.createElement("p");
+    msgElement.innerHTML = `<b>${data.sender}:</b> ${data.msg}`;
+    chatBox.appendChild(msgElement);
+    chatBox.scrollTop = chatBox.scrollHeight; // Auto-scroll
+  });
+
+  // Send message
+  function sendChatMessage() {
+    const input = document.getElementById("chat-input");
+    const msg = input.value.trim();
+    if (msg !== "") {
+      socket.emit('send_message', {room: room, user: user, msg: msg});
+      input.value = "";
+    }
+  }
+</script>
+
+
+
+<body onload="startFaceAndPhoneDetection(); startCountdown(); window.scrollTo(0, 0);">
+
+  <div id="timer">Time Left: 30:00</div>
+
+  <!-- ✅ Always-visible Webcam -->
+  <video id="video" autoplay muted></video>
+
+  <form id="examForm" method="POST" action="/submit_exam">
+    <h2>📝 Online Exam</h2>
+
+    <!-- ✅ Pass Subject -->
+    <input type="hidden" name="subject" value="{{ subject }}">
+
+    <label>Student Name:</label>
+    <input type="text" name="student_name" required />
+
+    <br><br>
+    {% for q in questions %}
+      <div class="question-block">
+        <p><strong>Q{{ loop.index }}:</strong> {{ q[1] }}</p>
+
+        <label><input type="radio" name="q{{ q[0] }}" value="{{ q[2] }}" required> {{ q[2] }}</label><br>
+        <label><input type="radio" name="q{{ q[0] }}" value="{{ q[3] }}"> {{ q[3] }}</label><br>
+        <label><input type="radio" name="q{{ q[0] }}" value="{{ q[4] }}"> {{ q[4] }}</label><br>
+        <label><input type="radio" name="q{{ q[0] }}" value="{{ q[5] }}"> {{ q[5] }}</label><br>
+        <hr>
+      </div>
+    {% endfor %}
+
+    <input type="hidden" name="violations" id="violations" value="0" />
+
+    <br><br>
+    <button type="submit">Submit</button>
+  </form>
+
+  <script>
+    // ⏳ Countdown Timer (30 minutes)
+    function startCountdown() {
+      let duration = 30 * 60;
+      const timerEl = document.getElementById("timer");
+
+      const interval = setInterval(() => {
+        const minutes = Math.floor(duration / 60);
+        const seconds = duration % 60;
+        timerEl.textContent = `Time Left: ${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+        duration--;
+
+        if (duration < 0) {
+          clearInterval(interval);
+          alert("⏰ Time's up! Auto-submitting exam.");
+          document.getElementById("examForm").submit();
+        }
+      }, 1000);
+    }
+
+    // 🔒 Tab switch detection
+    document.addEventListener("visibilitychange", () => {
+      if (document.hidden) {
+        alert("❗Tab switch detected! Submitting exam.");
+        document.getElementById("examForm").submit();
+      }
+    });
+
+    // ✅ On Submit
+    document.getElementById("examForm").addEventListener("submit", () => {
+      alert("✅ Exam submitted. Unlocking browser...");
+    });
+
+    // 🔒 System Key Blocker
+    document.addEventListener("keydown", function (e) {
+      const blockedKeys = [44, 123, 17, 18, 27];
+      if (blockedKeys.includes(e.keyCode)) {
+        alert("❌ System key pressed! Not allowed during exam.");
+        e.preventDefault();
+      }
+    });
+
+    // 🔒 Disable Right-Click
+    window.addEventListener("contextmenu", function (e) {
+      alert("❌ Right-click is disabled during exam.");
+      e.preventDefault();
+    });
+
+    // 🔒 Disable Copy, Paste, Cut, Drag
+    ["copy", "paste", "cut", "dragstart"].forEach(evt =>
+      document.addEventListener(evt, function (e) {
+        alert("🚫 Copy/Paste/Drag is disabled!");
+        e.preventDefault();
+      })
+    );
+  </script>
+
+  <!-- ✅ Snapshot Capture Every 5 Seconds -->
+  <script>
+    setInterval(() => {
+      navigator.mediaDevices.getUserMedia({ video: true }).then(stream => {
+        let video = document.createElement('video');
+        video.srcObject = stream;
+        video.play();
+        let canvas = document.createElement('canvas');
+        let context = canvas.getContext('2d');
+
+        video.onloadeddata = () => {
+          canvas.width = video.videoWidth;
+          canvas.height = video.videoHeight;
+          context.drawImage(video, 0, 0);
+          let dataURL = canvas.toDataURL('image/jpeg');
+
+          fetch('/upload_snapshot', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ image: dataURL, student_id: '{{ current_user.username }}' })
+          });
+
+          stream.getTracks().forEach(t => t.stop());
+        };
+      });
+    }, 5000);
+  </script>
+<script>
+  function uploadSnapshot(imageData, studentId, violationType = null) {
+    fetch('/upload_snapshot', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        image: imageData,
+        student_id: studentId,
+        violation_type: violationType
+      })
+    });
+  }
+
+  setInterval(() => {
+    navigator.mediaDevices.getUserMedia({ video: true }).then(stream => {
+      let video = document.createElement('video');
+      video.srcObject = stream;
+      video.play();
+      let canvas = document.createElement('canvas');
+      let context = canvas.getContext('2d');
+
+      video.onloadeddata = () => {
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        context.drawImage(video, 0, 0);
+        let dataURL = canvas.toDataURL('image/jpeg');
+
+        // ✅ Using the reusable upload function
+        uploadSnapshot(dataURL, '{{ current_user.username }}');
+
+        stream.getTracks().forEach(t => t.stop());
+      };
+    });
+  }, 5000);
+</script>
+
+</body>
+</html>

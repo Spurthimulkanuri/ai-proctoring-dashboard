@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Cheating Report PDF</title>
+  <style>
+    h2 { color: #333; }
+    table, th, td { border: 1px solid black; border-collapse: collapse; padding: 6px; }
+    body { font-family: Arial, sans-serif; margin: 20px; }
+  </style>
+</head>
+<body>
+  <h2>📊 Cheating Analysis Report</h2>
+  <p><strong>Subject:</strong> {{ subject }}</p>
+  <p><strong>Date Range:</strong> {{ start_date }} to {{ end_date }}</p>
+
+  <h3>🚨 Violations per Student</h3>
+  <table>
+    <tr><th>Student</th><th>Total Violations</th></tr>
+    {% for i in range(names|length) %}
+    <tr><td>{{ names[i] }}</td><td>{{ violations[i] }}</td></tr>
+    {% endfor %}
+  </table>
+
+  <h3>⚠️ Cheating Type Counts</h3>
+  <table>
+    <tr><th>Cheating Type</th><th>Count</th></tr>
+    {% for i in range(cheat_labels|length) %}
+    <tr><td>{{ cheat_labels[i] }}</td><td>{{ cheat_counts[i] }}</td></tr>
+    {% endfor %}
+  </table>
+</body>
+</html>
+

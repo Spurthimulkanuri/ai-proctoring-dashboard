@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>📊 Result Ranking - {{ subject }}</title>
+  <style>
+    table {
+      border-collapse: collapse;
+      width: 60%;
+      margin: 40px auto;
+    }
+
+    th, td {
+      border: 1px solid #aaa;
+      padding: 10px;
+      text-align: center;
+    }
+
+    th {
+      background-color: #f2f2f2;
+    }
+
+    h2 {
+      text-align: center;
+      color: #333;
+    }
+  </style>
+</head>
+<body>
+  <h2>📊 Result Ranking - {{ subject }}</h2>
+
+  <table>
+    <tr>
+      <th>Rank</th>
+      <th>Student Name</th>
+      <th>Marks</th>
+      <th>Violations</th>
+    </tr>
+    {% for rank, name, marks, vio in ranked %}
+    <tr>
+      <td>{{ rank }}</td>
+      <td>{{ name }}</td>
+      <td>{{ marks }}</td>
+      <td>{{ vio }}</td>
+    </tr>
+    {% endfor %}
+  </table>
+</body>
+</html>
+

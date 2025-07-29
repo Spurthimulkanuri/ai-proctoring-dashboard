@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html>
+<head><title>Edit Question</title></head>
+<body>
+  <h2>✏️ Edit Question</h2>
+
+  <form method="POST">
+    <label>Question:</label><br>
+    <input type="text" name="question" value="{{ question[1] }}" required><br><br>
+
+    <label>Option A:</label><br>
+    <input type="text" name="a" value="{{ question[2] }}" required><br><br>
+
+    <label>Option B:</label><br>
+    <input type="text" name="b" value="{{ question[3] }}" required><br><br>
+
+    <label>Option C:</label><br>
+    <input type="text" name="c" value="{{ question[4] }}" required><br><br>
+
+    <label>Option D:</label><br>
+    <input type="text" name="d" value="{{ question[5] }}" required><br><br>
+
+    <label>Correct Answer (a/b/c/d):</label><br>
+    <input type="text" name="correct" value="{{ question[6] }}" required><br><br>
+
+    <button type="submit">Update</button>
+  </form>
+
+  <br>
+  <a href="/admin">🔙 Back to Admin</a>
+</body>
+</html>
+

@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Plagiarism Detection</title>
+    <style>
+        body {
+            font-family: Arial;
+            background: #f0f8ff;
+            padding: 20px;
+        }
+        h2 {
+            color: #dc143c;
+        }
+        table {
+            border-collapse: collapse;
+            width: 80%;
+            margin-top: 20px;
+        }
+        th, td {
+            border: 1px solid #888;
+            padding: 10px;
+            text-align: center;
+        }
+        th {
+            background: #555;
+            color: #fff;
+        }
+        tr:nth-child(even) {
+            background: #f2f2f2;
+        }
+    </style>
+</head>
+<body>
+    <h2>🛑 Plagiarism Detection Report</h2>
+    {% if flagged_pairs %}
+        <table>
+            <tr>
+                <th>Student A</th>
+                <th>Student B</th>
+                <th>Similarity (%)</th>
+            </tr>
+            {% for a, b, sim in flagged_pairs %}
+            <tr>
+                <td>{{ a }}</td>
+                <td>{{ b }}</td>
+                <td>{{ sim }}%</td>
+            </tr>
+            {% endfor %}
+        </table>
+    {% else %}
+        <p style="color: green;">✅ No suspicious similarity detected among students.</p>
+    {% endif %}
+</body>
+</html>
+

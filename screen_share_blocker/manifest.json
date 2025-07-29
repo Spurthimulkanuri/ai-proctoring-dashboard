@@ -1,0 +1,20 @@
+{
+  "name": "ShuddhaExam Screen Recorder Blocker",
+  "version": "1.0",
+  "manifest_version": 3,
+  "description": "Detects screen recording or sharing during exams",
+  "permissions": ["scripting", "activeTab"],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["detector.js"]
+    }
+  ],
+  "action": {
+    "default_popup": "popup.html"
+  }
+}
+

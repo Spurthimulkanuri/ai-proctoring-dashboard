@@ -1,0 +1,2 @@
+SELECT * FROM questions;
+SQL error: no such table: questions

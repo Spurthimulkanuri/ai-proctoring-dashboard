@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Cheating Analytics</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    body {
+      font-family: Arial;
+      padding: 20px;
+    }
+    .chart-container {
+      width: 100%;
+      overflow-x: auto;
+    }
+    canvas {
+      min-width: 800px;
+      height: 300px;
+    }
+    form {
+      margin-bottom: 20px;
+    }
+  </style>
+</head>
+<body>
+  <h2>📊 Cheating Analytics</h2>
+
+  <form method="POST">
+    <label>Subject:</label>
+    <select name="subject">
+      <option value="">All</option>
+      {% for sub in subjects %}
+        <option value="{{ sub }}" {% if sub == selected_subject %}selected{% endif %}>{{ sub }}</option>
+      {% endfor %}
+    </select>
+
+    <label>Start Date:</label>
+    <input type="date" name="start_date" value="{{ start_date }}">
+
+    <label>End Date:</label>
+    <input type="date" name="end_date" value="{{ end_date }}">
+
+    <button type="submit">🔍 Filter</button>
+  </form>
+
+  <div class="chart-container">
+    <canvas id="barChart"></canvas>
+  </div>
+
+  <div class="chart-container">
+    <canvas id="pieChart"></canvas>
+  </div>
+
+  <script>
+    const names = {{ names|tojson }};
+    const violations = {{ violations|tojson }};
+
+    const uniqueNames = [...new Set(names)];
+    const pieColors = uniqueNames.map((_, i) => {
+      const palette = ['#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF', '#FF9F40'];
+      return palette[i % palette.length];
+    });
+
+    new Chart(document.getElementById("barChart"), {
+      type: 'bar',
+      data: {
+        labels: uniqueNames,
+        datasets: [{
+          label: 'Violations',
+          data: violations,
+          backgroundColor: 'rgba(255, 99, 132, 0.6)'
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        scales: {
+          x: { ticks: { autoSkip: false, maxRotation: 90, minRotation: 45 } },
+          y: { beginAtZero: true }
+        }
+      }
+    });
+
+    new Chart(document.getElementById("pieChart"), {
+      type: 'pie',
+      data: {
+        labels: uniqueNames,
+        datasets: [{
+          data: violations,
+          backgroundColor: pieColors
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { position: 'bottom' }
+        }
+      }
+    });
+  </script>
+
+  <br>
+  <a href="/admin">🔙 Back to Admin Panel</a>
+  <form method="POST" action="/download_analytics_pdf">
+  <input type="hidden" name="subject" value="{{ selected_subject }}">
+  <input type="hidden" name="start_date" value="{{ start_date }}">
+  <input type="hidden" name="end_date" value="{{ end_date }}">
+  <button type="submit">📥 Download Analytics PDF</button>
+</form>
+
+<a href="/download_violations"><button>📥 Download Violation Summary CSV</button></a>
+
+</body>
+</html>
+

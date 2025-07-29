@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Register | ShuddhaExam</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      height: 100vh;
+      font-family: "Segoe UI", sans-serif;
+      background: #1D87AD;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+
+    .register-box {
+      background: rgba(255, 255, 255, 0.15);
+      backdrop-filter: blur(10px);
+      padding: 35px 40px;
+      border-radius: 15px;
+      box-shadow: 0 8px 30px rgba(0, 0, 0, 0.3);
+      width: 400px;
+      color: #fff;
+    }
+
+    .register-box h2 {
+      text-align: center;
+      margin-bottom: 20px;
+      font-size: 24px;
+      color: #fff;
+    }
+
+    input[type="text"],
+    input[type="password"],
+    select {
+      width: 100%;
+      padding: 10px;
+      margin: 10px 0;
+      border: none;
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.2);
+      color: #fff;
+      outline: none;
+    }
+
+    input::placeholder {
+      color: #eee;
+    }
+
+    input[type="submit"] {
+      width: 100%;
+      background: #fff;
+      color: #1D87AD;
+      border: none;
+      padding: 10px;
+      border-radius: 50px;
+      cursor: pointer;
+      font-weight: bold;
+      margin-top: 20px;
+      transition: background 0.3s ease;
+    }
+
+    input[type="submit"]:hover {
+      background: #e0e0e0;
+    }
+
+    select option {
+      color: #000;
+    }
+  </style>
+</head>
+<body>
+  <div class="register-box">
+    <h2>📝 Register as Student</h2>
+    <form method="POST" action="/register">
+      <input type="text" name="username" placeholder="Username" required>
+      <input type="password" name="password" placeholder="Password" required>
+
+      <select name="branch" required>
+        <option value="">Select Branch</option>
+        <option value="CSE">CSE</option>
+        <option value="ECE">ECE</option>
+        <option value="EEE">EEE</option>
+        <option value="MECH">MECH</option>
+        <option value="CIVIL">CIVIL</option>
+        <option value="CHEM">CHEMICAL</option>
+      </select>
+
+      <select name="year" required>
+        <option value="">Select Year</option>
+        <option value="1">1st Year</option>
+        <option value="2">2nd Year</option>
+        <option value="3">3rd Year</option>
+        <option value="4">4th Year</option>
+      </select>
+
+      <input type="text" name="subject" placeholder="Subject" required>
+
+      <input type="submit" value="Register">
+    </form>
+  </div>
+</body>
+</html>
+
